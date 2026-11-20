@@ -1,6 +1,1 @@
-// Fill these two values from Supabase: Project Settings > API.
-// The anon key is meant to be public: access is controlled by sign-in and the database rules in supabase/schema.sql.
-window.WMS_CONFIG = {
-  SUPABASE_URL: "PASTE_YOUR_PROJECT_URL_HERE",       // e.g. https://abcdxyz.supabase.co
-  SUPABASE_ANON_KEY: "PASTE_YOUR_ANON_KEY_HERE"      // the "anon" / "publishable" key, NOT the service key
-};
+window.WMS_CONFIG = { SUPABASE_URL: "https://vooskkzbmuprrffehppg.supabase.co", SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvb3Nra3pibXVwcnJmZmVocHBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxNjYyMzUsImV4cCI6MjExMDc0MjIzNX0.IjEMhkfajiFIfWzIgrtfyKF9FTBFbptp8uu7MVExM2o" };
