@@ -1568,6 +1568,87 @@ function App() {
   };
 
   // Generate Weekly Project-Wise Report matching exact Excel formatting & right-aligned numbers
+  // ---- Txn History: filters + Excel export ----
+  const [txnProject, setTxnProject] = useState('ALL');
+  const [txnType, setTxnType] = useState('ALL');
+  const [txnFrom, setTxnFrom] = useState('');
+  const [txnTo, setTxnTo] = useState('');
+  const txnDate = (t) => (t.timestamp ? String(t.timestamp).split(' ')[0] : (t.dateReceived || ''));
+  const txnProjects = Array.from(new Set(transactions.map((t) => t.project).filter(Boolean))).sort();
+  const filteredTxnList = transactions.filter((t) => {
+    if (txnProject !== 'ALL' && t.project !== txnProject) return false;
+    if (txnType !== 'ALL' && t.type !== txnType) return false;
+    const d = txnDate(t);
+    if (txnFrom && (!d || d < txnFrom)) return false;
+    if (txnTo && (!d || d > txnTo)) return false;
+    return true;
+  });
+  const exportTransactionsExcel = async () => {
+    if (typeof ExcelJS === 'undefined') { showToast('Excel writer did not load. Check your connection and reload.', 'error'); return; }
+    if (!filteredTxnList.length) { showToast('No transactions match the current filters.', 'error'); return; }
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Assent Steel Industries';
+    const ws = wb.addWorksheet('Txn History', { pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    const NC = 9;
+    [18, 20, 8, 22, 22, 26, 12, 10, 20].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+    const thin = { style: 'thin', color: { argb: 'FFCBD5E1' } };
+    const box = { top: thin, left: thin, bottom: thin, right: thin };
+    const font = (o) => ({ name: 'Arial', size: 10, ...o });
+    ws.mergeCells(1, 1, 1, NC);
+    ws.getRow(1).height = 58;
+    for (let c = 1; c <= NC; c++) { ws.getCell(1, c).fill = fill('FFFFFFFF'); ws.getCell(1, c).border = { bottom: { style: 'thick', color: { argb: 'FF59B048' } } }; }
+    try {
+      const logoId = wb.addImage({ base64: ASSENT_LOGO_SRC, extension: 'jpeg' });
+      ws.addImage(logoId, { tl: { col: 0.1, row: 0.12 }, ext: { width: 240, height: 50 } });
+    } catch (e) {}
+    ws.mergeCells(2, 1, 2, NC);
+    Object.assign(ws.getCell(2, 1), { value: 'ASSENT STEEL INDUSTRIES L.L.C.', fill: fill('FF1D3865'), font: font({ bold: true, size: 16, color: { argb: 'FFFFFFFF' } }), alignment: { horizontal: 'center', vertical: 'middle' } });
+    ws.getRow(2).height = 30;
+    ws.mergeCells(3, 1, 3, NC);
+    Object.assign(ws.getCell(3, 1), { value: 'FASTENERS STORE — TRANSACTION HISTORY', fill: fill('FF59B048'), font: font({ bold: true, size: 12, color: { argb: 'FFFFFFFF' } }), alignment: { horizontal: 'center', vertical: 'middle' } });
+    ws.getRow(3).height = 22;
+    const filt = `Project: ${txnProject === 'ALL' ? 'All' : txnProject}   |   Type: ${txnType === 'ALL' ? 'All' : txnType}   |   Dates: ${txnFrom || 'start'} to ${txnTo || 'latest'}   |   Rows: ${filteredTxnList.length}   |   Generated: ${CURRENT_DATE_STR}`;
+    ws.mergeCells(5, 1, 5, NC);
+    Object.assign(ws.getCell(5, 1), { value: filt, font: font({ bold: true, color: { argb: 'FF1D3865' } }), alignment: { horizontal: 'left', vertical: 'middle' } });
+    ws.getRow(5).height = 20;
+    const HR = 7;
+    ['Txn ID', 'Timestamp', 'Type', 'Doc Ref', 'Project', 'SKU', 'Cartons', 'Pcs', 'Location'].forEach((h, i) => {
+      const c = ws.getCell(HR, i + 1);
+      c.value = h; c.fill = fill('FF1D3865'); c.border = box;
+      c.font = font({ bold: true, color: { argb: 'FFFFFFFF' } });
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    ws.getRow(HR).height = 26;
+    let inC = 0, outC = 0;
+    filteredTxnList.forEach((t, idx) => {
+      const rn = HR + 1 + idx;
+      if (t.type === 'IN') inC += Number(t.cartons) || 0; else outC += Number(t.cartons) || 0;
+      const vals = [t.id, t.timestamp || '', t.type, t.docRef || '', t.project || '', t.sku || '', Number(t.cartons) || 0, Number(t.pcs) || 0, t.locationId || ''];
+      const base = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC';
+      vals.forEach((v, i) => {
+        const c = ws.getCell(rn, i + 1);
+        c.value = v; c.border = box; c.fill = fill(base);
+        c.font = font(i === 2 ? { bold: true, color: { argb: t.type === 'IN' ? 'FF166534' : 'FF991B1B' } } : {});
+        c.alignment = { horizontal: (i === 6 || i === 7) ? 'right' : (i === 2 ? 'center' : 'left'), vertical: 'middle' };
+        if (i === 6 || i === 7) c.numFmt = '#,##0';
+      });
+    });
+    const tr = HR + filteredTxnList.length + 1;
+    ws.mergeCells(tr, 1, tr, 6);
+    Object.assign(ws.getCell(tr, 1), { value: `TOTALS — Inbound ${inC} CTN | Outbound ${outC} CTN`, font: font({ bold: true, color: { argb: 'FFFFFFFF' } }), fill: fill('FF1D3865'), alignment: { horizontal: 'left', vertical: 'middle' } });
+    for (let c = 1; c <= NC; c++) ws.getCell(tr, c).fill = fill('FF1D3865');
+    ws.getRow(tr).height = 22;
+    ws.autoFilter = { from: { row: HR, column: 1 }, to: { row: HR + filteredTxnList.length, column: NC } };
+    ws.views = [{ state: 'frozen', ySplit: HR, showGridLines: false }];
+    try {
+      const buffer = await wb.xlsx.writeBuffer();
+      const tag = [txnProject !== 'ALL' ? txnProject.replace(/[^A-Za-z0-9-]/g, '') : 'AllProjects', txnFrom || '', txnTo || ''].filter(Boolean).join('_');
+      const ok = await __save(`Txn_History_${tag}_${CURRENT_DATE_STR}.xlsx`, buffer);
+      if (ok) showToast(`Exported ${filteredTxnList.length} transactions to Excel.`);
+    } catch (e) { console.error(e); showToast('Could not build the Excel file.', 'error'); }
+  };
+
   const exportWeeklyProjectWiseReport = async () => {
     if (typeof ExcelJS === 'undefined') { showToast('Excel writer did not load. Check your connection and reload.', 'error'); return; }
     const start = reportStartDate;
@@ -4152,7 +4233,33 @@ function App() {
             <h2 className="text-xl font-black text-[#1d3865] mb-1 flex items-center gap-2">
               <History className="w-6 h-6 text-[#59b048]" /> Goods Receipt & Issue Transaction Audit Log
             </h2>
-            <p className="text-xs text-slate-500 mb-6 border-b pb-3">Complete movement history log.</p>
+            <p className="text-xs text-slate-500 mb-4 border-b pb-3">Complete movement history log.</p>
+            <div className="flex flex-wrap items-end gap-3 mb-5 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex flex-col gap-1">Project
+                <select value={txnProject} onChange={(e) => setTxnProject(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 bg-white normal-case tracking-normal">
+                  <option value="ALL">All projects</option>
+                  {txnProjects.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex flex-col gap-1">Type
+                <select value={txnType} onChange={(e) => setTxnType(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 bg-white normal-case tracking-normal">
+                  <option value="ALL">In and Out</option>
+                  <option value="IN">IN only</option>
+                  <option value="OUT">OUT only</option>
+                </select>
+              </label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex flex-col gap-1">From date
+                <input type="date" value={txnFrom} onChange={(e) => setTxnFrom(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 bg-white" />
+              </label>
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex flex-col gap-1">To date
+                <input type="date" value={txnTo} onChange={(e) => setTxnTo(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 bg-white" />
+              </label>
+              <button onClick={() => { setTxnProject('ALL'); setTxnType('ALL'); setTxnFrom(''); setTxnTo(''); }} className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-600 bg-white hover:bg-slate-100">Clear</button>
+              <div className="text-xs font-bold text-slate-500 ml-auto self-center">{filteredTxnList.length} of {transactions.length} transactions</div>
+              <button onClick={exportTransactionsExcel} className="px-4 py-2 rounded-xl bg-[#59b048] hover:bg-[#4a973c] text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow">
+                <FileSpreadsheet className="w-4 h-4" /> Export to Excel
+              </button>
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
@@ -4169,7 +4276,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {transactions.map(txn => (
+                  {filteredTxnList.map(txn => (
                     <tr key={txn.id} className="hover:bg-slate-50 font-bold">
                       <td className="p-3 font-mono text-[#1d3865]">{txn.id}</td>
                       <td className="p-3 text-slate-600">{txn.timestamp}</td>
