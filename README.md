@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/35139956/README.md)
 # ASSENT Fasteners Store Visual WMS: Cloud Edition (mockup round)
 
 The same app as before, but data is saved in the cloud so every tester sees the same stock, and the AI document scan works outside claude.ai.

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fasteners Store Visual WMS</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #f1f5f9; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #boot { padding: 48px 24px; color: #1d3865; font-weight: 700; text-align: center; }
+  #err { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: #b91c1c; padding: 24px; }
+  .ask-ov { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 16px; }
+  .ask-box { background: #fff; color: #1e293b; border-radius: 12px; padding: 20px; max-width: 380px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+  .ask-box p { margin: 0 0 16px; font-size: 14px; font-weight: 600; line-height: 1.45; }
+  .ask-row { display: flex; gap: 8px; justify-content: flex-end; }
+  .ask-row button { border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .ask-no { background: #e2e8f0; color: #334155; }
+  .ask-yes { background: #b91c1c; color: #fff; }
+  /* sign-in */
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .login { background: #fff; border-top: 5px solid #59b048; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.12); width: 100%; max-width: 380px; padding: 24px; }
+  .login img { height: 44px; display: block; margin: 0 auto 12px; }
+  .login h1 { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: #1d3865; text-align: center; margin: 0 0 18px; font-weight: 900; }
+  .login label { display: block; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 10px 0 4px; }
+  .login input { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 14px; }
+  .login button { width: 100%; margin-top: 16px; background: #1d3865; color: #fff; border: 0; border-radius: 10px; padding: 11px; font-weight: 800; cursor: pointer; font-size: 14px; }
+  .login button:disabled { opacity: .6; }
+  .login .msg { color: #b91c1c; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .login .note { color: #64748b; font-size: 11px; margin-top: 12px; text-align: center; }
+  /* cloud status */
+  #cloudbar { position: fixed; left: 10px; bottom: 10px; z-index: 9999; background: #1d3865; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 6px 12px; box-shadow: 0 4px 12px rgba(0,0,0,.25); display: flex; gap: 10px; align-items: center; }
+  #cloudbar .dot { width: 8px; height: 8px; border-radius: 50%; background: #59b048; display: inline-block; }
+  #cloudbar .dot.busy { background: #fbbf24; } #cloudbar .dot.bad { background: #ef4444; }
+  #cloudbar button { background: transparent; border: 1px solid rgba(255,255,255,.4); color: #fff; border-radius: 999px; font-size: 10px; padding: 2px 8px; cursor: pointer; }
+  #banner { position: fixed; top: 0; left: 0; right: 0; z-index: 99998; padding: 8px 12px; font-size: 13px; font-weight: 700; text-align: center; display: none; }
+  #banner.warn { background: #fef3c7; color: #78350f; border-bottom: 2px solid #f59e0b; }
+  #banner.bad { background: #fee2e2; color: #7f1d1d; border-bottom: 2px solid #ef4444; }
+  #banner button { margin-left: 10px; border: 0; background: #1d3865; color: #fff; border-radius: 6px; padding: 4px 10px; font-weight: 800; cursor: pointer; }
+</style>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.383.0/dist/umd/lucide-react.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="cloud.js"></script>
+</head>
+<body>
+<div id="banner"></div>
+<div id="root"><div id="boot">Loading Assent Warehouse Management System…</div></div>
+<script>
+(function () {
+  const root = document.getElementById("root");
+  const ICONS = ["LayoutDashboard", "ArrowDownLeft", "ArrowUpRight", "Database", "Archive", "History", "Package", "PackagePlus", "AlertCircle", "CheckCircle2", "Warehouse", "BarChart3", "Search", "Sparkles", "X", "Download", "Map", "GripVertical", "Copy", "Check", "Trash2", "ClipboardList", "Filter", "ShieldCheck", "Cloud", "HardDrive", "RefreshCw", "Plus", "Merge", "Calendar", "FileSpreadsheet", "Clock"];
+  const C = window.WMSCloud;
+
+  function fail(msg) {
+    root.innerHTML = '<div id="err"></div>';
+    document.getElementById("err").textContent = msg;
+  }
+
+  // ---- custom confirm dialog (window.confirm is avoided) ----
+  function __ask(message, onYes) {
+    const ov = document.createElement("div"); ov.className = "ask-ov";
+    const box = document.createElement("div"); box.className = "ask-box";
+    const p = document.createElement("p"); p.textContent = message;
+    const row = document.createElement("div"); row.className = "ask-row";
+    const close = () => ov.remove();
+    const no = document.createElement("button"); no.className = "ask-no"; no.textContent = onYes ? "Cancel" : "OK";
+    no.onclick = close; row.appendChild(no);
+    if (onYes) { const yes = document.createElement("button"); yes.className = "ask-yes"; yes.textContent = "Confirm"; yes.onclick = () => { close(); onYes(); }; row.appendChild(yes); }
+    box.append(p, row); ov.appendChild(box); document.body.appendChild(ov);
+  }
+
+  // ---- file download (CSV text, Excel bytes, HTML) ----
+  async function __save(filename, data) {
+    try {
+      const ext = (filename.split(".").pop() || "").toLowerCase();
+      const types = { csv: "text/csv;charset=utf-8", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", html: "text/html;charset=utf-8", json: "application/json" };
+      const blob = new Blob([data], { type: types[ext] || "application/octet-stream" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      return true;
+    } catch (e) { console.error(e); return false; }
+  }
+
+  // ---- sign-in screen ----
+  function showLogin(note) {
+    return new Promise((resolve) => {
+      root.innerHTML = '<div class="login-wrap"><form class="login" id="lf"><img src="logo.jpg" alt="Assent Steel Industries" onerror="this.style.display=\'none\'">' +
+        '<h1>Fasteners Store Visual WMS</h1><label>Email</label><input id="em" type="email" autocomplete="username" required>' +
+        '<label>Password</label><input id="pw" type="password" autocomplete="current-password" required>' +
+        '<button id="go" type="submit">Sign in</button><div class="msg" id="msg">' + (note || "") + '</div>' +
+        '<div class="note">Accounts are created by the administrator.</div></form></div>';
+      document.getElementById("lf").onsubmit = async (ev) => {
+        ev.preventDefault();
+        const go = document.getElementById("go"), msg = document.getElementById("msg");
+        go.disabled = true; msg.textContent = "";
+        try { await C.signIn(document.getElementById("em").value.trim(), document.getElementById("pw").value); resolve(); }
+        catch (e) { msg.textContent = (e && e.message) || "Sign-in failed"; go.disabled = false; }
+      };
+    });
+  }
+
+  // ---- status bar and banners ----
+  function mountStatus() {
+    const bar = document.createElement("div"); bar.id = "cloudbar";
+    document.body.appendChild(bar);
+    const banner = document.getElementById("banner");
+    const render = () => {
+      const s = C.state;
+      const busy = s.saving > 0 || Object.keys(s.pending).length > 0;
+      const cls = s.blocked || s.error ? "bad" : busy ? "busy" : "";
+      const txt = s.blocked ? "Not saved" : s.error ? "Retrying save…" : busy ? "Saving…" : "Saved to cloud" + (s.lastSaved ? " " + s.lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+      bar.innerHTML = '<span class="dot ' + cls + '"></span><span>' + txt + '</span><span style="opacity:.7">' + (s.user ? s.user.email : "") + '</span><button id="so">Sign out</button>';
+      document.getElementById("so").onclick = () => C.signOut();
+      if (s.blocked) { banner.className = "bad"; banner.style.display = "block"; banner.innerHTML = 'Someone else saved changes first, so your last change was not saved. Reload to get the latest data. <button onclick="location.reload()">Reload</button>'; }
+      else if (s.remote) { banner.className = "warn"; banner.style.display = "block"; banner.innerHTML = 'Another user changed the data. Refresh to see it. <button onclick="location.reload()">Refresh</button>'; }
+      else banner.style.display = "none";
+    };
+    C.onChange(render); render();
+    window.addEventListener("beforeunload", (e) => { C.flushAll(); if (C.state.saving > 0 || Object.keys(C.state.pending).length > 0) { e.preventDefault(); e.returnValue = ""; } });
+    window.addEventListener("online", () => C.flushAll());
+  }
+
+  async function start() {
+    if (!C || !C.configured()) { fail("Setup needed: open config.js and paste your Supabase project URL and anon key (see README.md, step 3)."); return; }
+    if (!window.supabase) { fail("The Supabase library did not load. Check your internet connection and reload."); return; }
+    C.init();
+    let sess = null;
+    try { sess = await C.session(); } catch (e) {}
+    if (!sess) await showLogin();
+    root.innerHTML = '<div id="boot">Loading data from the cloud…</div>';
+    try { await C.hydrate(); } catch (e) { fail("Could not load data from the cloud.\n\n" + (e && e.message || e) + "\n\nCheck that supabase/schema.sql was run and that you are signed in. Then reload."); return; }
+    window.WMS_CLOUD = { email: C.state.user && C.state.user.email };
+    C.watchRemote();
+    let SRC;
+    try { SRC = await (await fetch("app.jsx", { cache: "no-cache" })).text(); } catch (e) { fail("Could not load app.jsx: " + e); return; }
+    try {
+      const L = window.LucideReact || window.lucideReact || {};
+      const Blank = () => null;
+      const iconVals = ICONS.map((n) => L[n] || Blank);
+      const out = Babel.transform(SRC, { presets: ["react", "typescript"], filename: "App.tsx" }).code;
+      const factory = new Function("React", "useState", "useEffect", "localStorage", "__save", "__ask", ...ICONS, out + "\nreturn App;");
+      const App = factory(React, React.useState, React.useEffect, C.storage, __save, __ask, ...iconVals);
+      ReactDOM.createRoot(root).render(React.createElement(App));
+      mountStatus();
+    } catch (e) { fail("Failed to start: " + (e && e.stack || e)); }
+  }
+  start();
+})();
+</script>
+</body>
+</html>
