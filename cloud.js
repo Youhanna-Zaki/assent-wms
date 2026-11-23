@@ -167,7 +167,7 @@
   });
   // ---- AI engine setting: "cloud" (Supabase function + Gemini) or "local" (Ollama / LM Studio on this PC) ----
   const AI_KEY = 'WMS_AI_ENGINE_V1';
-  const aiDefaults = { engine: 'cloud', url: 'http://localhost:11434', model: '' };
+  const aiDefaults = { engine: 'cloud', url: 'http://127.0.0.1:11434', model: '' };
   const ai = {
     get() { try { return Object.assign({}, aiDefaults, JSON.parse(window.localStorage.getItem(AI_KEY) || '{}')); } catch (e) { return Object.assign({}, aiDefaults); } },
     set(v) { try { window.localStorage.setItem(AI_KEY, JSON.stringify(Object.assign(ai.get(), v))); } catch (e) {} emit(); },
@@ -193,7 +193,7 @@
     const content = imgs.map((im) => ({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data } }));
     content.push({ type: 'text', text: prompt });
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 300000);
+    const timer = setTimeout(() => ctl.abort(), 900000);
     let resp;
     try {
       resp = await fetch(c.url.replace(/\/$/, '') + '/v1/chat/completions', {
@@ -202,7 +202,8 @@
         body: JSON.stringify({ model: c.model, temperature: 0, stream: false, messages: [{ role: 'system', content: LOCAL_SYSTEM }, { role: 'user', content }] })
       });
     } catch (e) {
-      throw { code: 'sampling_disabled', message: 'Local AI is not reachable at ' + c.url + '. Is Ollama / LM Studio running?' };
+      if (e && e.name === 'AbortError') throw { code: 'scan_error', message: 'Local AI took longer than 15 minutes for one page. Use a smaller/faster model, a PC with a graphics card, or the Cloud engine.' };
+      throw { code: 'sampling_disabled', message: 'Local AI is not reachable at ' + c.url + '. Is Ollama / LM Studio running? (For Ollama, OLLAMA_ORIGINS must include this site.)' };
     } finally { clearTimeout(timer); }
     const body = await resp.json().catch(() => ({}));
     if (!resp.ok) throw { code: 'scan_error', message: 'Local AI error: ' + ((body && body.error && (body.error.message || body.error)) || resp.statusText) };
@@ -227,7 +228,7 @@
         });
       } catch (e) { throw { code: 'sampling_disabled', message: 'Scan function unreachable' }; }
       if (resp.status === 401) throw { code: 'session_expired' };
-      if (resp.status === 429) throw { code: 'rate_limited' };
+      if (resp.status === 429) { const b429 = await resp.json().catch(() => ({})); throw { code: 'rate_limited', message: b429.error }; }
       if (resp.status === 404 || resp.status === 503) throw { code: 'sampling_disabled' };
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) throw { code: 'scan_error', message: body.error || resp.statusText };
