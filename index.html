@@ -126,28 +126,34 @@
       + '<input id="aiu" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px" placeholder="http://localhost:11434">'
       + '<div style="font-size:11px;color:#64748b;margin:2px 0 8px">Ollama: http://localhost:11434 &nbsp; LM Studio: http://localhost:1234</div>'
       + '<div style="font-size:11px;font-weight:800;color:#475569">Model (must read images)</div>'
-      + '<div style="display:flex;gap:6px"><input id="aim" list="aiml" style="flex:1;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px" placeholder="model name"><datalist id="aiml"></datalist>'
-      + '<button id="ait" style="border:1px solid #1d3865;background:#fff;color:#1d3865;border-radius:8px;padding:0 12px;font-weight:800;cursor:pointer">Find models</button></div>'
+      + '<div style="display:flex;gap:6px"><select id="aim" style="flex:1;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;background:#fff"></select>'
+      + '<button id="ait" style="border:1px solid #1d3865;background:#fff;color:#1d3865;border-radius:8px;padding:0 12px;font-weight:800;cursor:pointer">Refresh</button></div>'
       + '<div id="aimsg" style="font-size:12px;min-height:18px;margin-top:6px"></div></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button id="aic" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer">Cancel</button><button id="ais" style="border:0;background:#1d3865;color:#fff;border-radius:8px;padding:8px 16px;font-weight:800;cursor:pointer">Save</button></div></div>';
     document.body.appendChild(ov);
     const q = (id) => document.getElementById(id);
     ov.querySelectorAll('input[name=eng]').forEach((r) => { r.checked = r.value === cur.engine; r.onchange = sync; });
-    q("aiu").value = cur.url; q("aim").value = cur.model;
+    q("aiu").value = cur.url;
+    const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    q("aim").innerHTML = cur.model ? '<option value="' + esc(cur.model) + '">' + esc(cur.model) + '</option>' : '<option value="">Loading models\u2026</option>';
     function sync() { const loc = ov.querySelector('input[name=eng]:checked').value === "local"; q("lcl").style.opacity = loc ? 1 : .4; }
     sync();
-    q("ait").onclick = async () => {
+    async function loadModels() {
       C.ai.set({ url: q("aiu").value.trim() || cur.url });
-      q("aimsg").style.color = "#475569"; q("aimsg").textContent = "Looking…";
+      q("aimsg").style.color = "#475569"; q("aimsg").textContent = "Looking\u2026";
       try {
         const ms = await C.ai.models();
-        q("aiml").innerHTML = ms.map((m) => '<option value="' + m.replace(/"/g, "&quot;") + '">').join("");
-        if (!q("aim").value && ms.length) q("aim").value = ms[0];
-        q("aimsg").style.color = "#166534"; q("aimsg").textContent = ms.length ? "Connected. " + ms.length + " model(s) found. Pick one that can read images." : "Connected, but no models are installed.";
+        const keep = q("aim").value || cur.model;
+        q("aim").innerHTML = ms.length ? ms.map((m) => '<option value="' + esc(m) + '">' + esc(m) + '</option>').join("") : '<option value="">No models installed</option>';
+        if (ms.indexOf(keep) >= 0) q("aim").value = keep;
+        q("aimsg").style.color = "#166534"; q("aimsg").textContent = ms.length ? ms.length + " model(s) installed. Pick one from the list (the arrow on the right)." : "Connected, but no models are installed.";
       } catch (e) {
-        q("aimsg").style.color = "#b91c1c"; q("aimsg").textContent = "Could not reach the server. Is it running? For Ollama, the website must be allowed (OLLAMA_ORIGINS).";
+        if (!cur.model) q("aim").innerHTML = '<option value="">(no models found)</option>';
+        q("aimsg").style.color = "#b91c1c"; q("aimsg").textContent = "Could not reach the server. Is Ollama running? For Ollama, the website must be allowed (OLLAMA_ORIGINS).";
       }
-    };
+    }
+    q("ait").onclick = loadModels;
+    loadModels();
     q("aic").onclick = () => ov.remove();
     q("ais").onclick = () => { C.ai.set({ engine: ov.querySelector('input[name=eng]:checked').value, url: q("aiu").value.trim() || cur.url, model: q("aim").value.trim() }); ov.remove(); };
   }
