@@ -110,6 +110,48 @@
     });
   }
 
+  // ---- AI engine dialog ----
+  function openAiDialog() {
+    if (document.getElementById("aidlg")) return;
+    const cur = C.ai.get();
+    const ov = document.createElement("div"); ov.id = "aidlg";
+    ov.style.cssText = "position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:20px;font-family:system-ui,sans-serif;color:#1e293b;box-shadow:0 20px 50px rgba(0,0,0,.4)">'
+      + '<div style="font-weight:900;color:#1d3865;font-size:16px;margin-bottom:4px">AI engine for document scanning</div>'
+      + '<div style="font-size:12px;color:#64748b;margin-bottom:12px">Saved in this browser only.</div>'
+      + '<label style="display:block;font-size:13px;font-weight:700;margin:6px 0"><input type="radio" name="eng" value="cloud"> Cloud (Gemini, free limits apply)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:700;margin:6px 0"><input type="radio" name="eng" value="local"> Local AI on this PC (Ollama or LM Studio)</label>'
+      + '<div id="lcl" style="margin-top:8px">'
+      + '<div style="font-size:11px;font-weight:800;color:#475569">Server address</div>'
+      + '<input id="aiu" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px" placeholder="http://localhost:11434">'
+      + '<div style="font-size:11px;color:#64748b;margin:2px 0 8px">Ollama: http://localhost:11434 &nbsp; LM Studio: http://localhost:1234</div>'
+      + '<div style="font-size:11px;font-weight:800;color:#475569">Model (must read images)</div>'
+      + '<div style="display:flex;gap:6px"><input id="aim" list="aiml" style="flex:1;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px" placeholder="model name"><datalist id="aiml"></datalist>'
+      + '<button id="ait" style="border:1px solid #1d3865;background:#fff;color:#1d3865;border-radius:8px;padding:0 12px;font-weight:800;cursor:pointer">Find models</button></div>'
+      + '<div id="aimsg" style="font-size:12px;min-height:18px;margin-top:6px"></div></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button id="aic" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer">Cancel</button><button id="ais" style="border:0;background:#1d3865;color:#fff;border-radius:8px;padding:8px 16px;font-weight:800;cursor:pointer">Save</button></div></div>';
+    document.body.appendChild(ov);
+    const q = (id) => document.getElementById(id);
+    ov.querySelectorAll('input[name=eng]').forEach((r) => { r.checked = r.value === cur.engine; r.onchange = sync; });
+    q("aiu").value = cur.url; q("aim").value = cur.model;
+    function sync() { const loc = ov.querySelector('input[name=eng]:checked').value === "local"; q("lcl").style.opacity = loc ? 1 : .4; }
+    sync();
+    q("ait").onclick = async () => {
+      C.ai.set({ url: q("aiu").value.trim() || cur.url });
+      q("aimsg").style.color = "#475569"; q("aimsg").textContent = "Looking…";
+      try {
+        const ms = await C.ai.models();
+        q("aiml").innerHTML = ms.map((m) => '<option value="' + m.replace(/"/g, "&quot;") + '">').join("");
+        if (!q("aim").value && ms.length) q("aim").value = ms[0];
+        q("aimsg").style.color = "#166534"; q("aimsg").textContent = ms.length ? "Connected. " + ms.length + " model(s) found. Pick one that can read images." : "Connected, but no models are installed.";
+      } catch (e) {
+        q("aimsg").style.color = "#b91c1c"; q("aimsg").textContent = "Could not reach the server. Is it running? For Ollama, the website must be allowed (OLLAMA_ORIGINS).";
+      }
+    };
+    q("aic").onclick = () => ov.remove();
+    q("ais").onclick = () => { C.ai.set({ engine: ov.querySelector('input[name=eng]:checked').value, url: q("aiu").value.trim() || cur.url, model: q("aim").value.trim() }); ov.remove(); };
+  }
+
   // ---- status bar and banners ----
   function mountStatus() {
     const bar = document.createElement("div"); bar.id = "cloudbar";
@@ -120,8 +162,9 @@
       const busy = s.saving > 0 || Object.keys(s.pending).length > 0;
       const cls = s.blocked || s.error ? "bad" : busy ? "busy" : "";
       const txt = s.blocked ? "Not saved" : s.error ? "Retrying save…" : busy ? "Saving…" : "Saved to cloud" + (s.lastSaved ? " " + s.lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
-      bar.innerHTML = '<span class="dot ' + cls + '"></span><span>' + txt + '</span><span style="opacity:.7">' + (s.user ? s.user.email : "") + '</span><button id="so">Sign out</button>';
+      bar.innerHTML = '<span class="dot ' + cls + '"></span><span>' + txt + '</span><span style="opacity:.7">' + (s.user ? s.user.email : "") + '</span><button id="aib">AI: ' + (C.ai.get().engine === 'local' ? 'Local' : 'Cloud') + '</button><button id="so">Sign out</button>';
       document.getElementById("so").onclick = () => C.signOut();
+      document.getElementById("aib").onclick = openAiDialog;
       if (s.blocked) { banner.className = "bad"; banner.style.display = "block"; banner.innerHTML = 'Someone else saved changes first, so your last change was not saved. Reload to get the latest data. <button onclick="location.reload()">Reload</button>'; }
       else if (s.remote) { banner.className = "warn"; banner.style.display = "block"; banner.innerHTML = 'Another user changed the data. Refresh to see it. <button onclick="location.reload()">Refresh</button>'; }
       else banner.style.display = "none";
