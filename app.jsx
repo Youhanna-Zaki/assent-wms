@@ -1062,7 +1062,7 @@ function App() {
       const sample = window.claude ? await window.claude.use('sample') : null;
       const lim = sample ? await sample.limits().catch(() => null) : null;
       const maxImgs = lim && lim.images ? lim.images.maxCount : 0;
-      if (!sample || !maxImgs) { showToast('AI scanning is not available. Check that the scan function is deployed and the Claude API key is set (see README).', 'error'); return; }
+      if (!sample || !maxImgs) { showToast('AI scanning is not available. Check that the scan function is deployed and the AI key is set, or choose Local AI at the bottom left.', 'error'); return; }
 
       let pages = [];
       for (let fi = 0; fi < files.length; fi++) {
@@ -1083,7 +1083,7 @@ function App() {
             const r = await sample.json(SCAN_PROMPT, { images: imgs });
             results[i] = { ...(r && typeof r === 'object' ? r : {}) };
           } catch (err) {
-            if (err && ['not_granted', 'sampling_disabled', 'rate_limited', 'session_expired', 'images_unavailable'].includes(err.code)) { fatal = err; return; }
+            if (err && ['not_granted', 'sampling_disabled', 'rate_limited', 'session_expired', 'images_unavailable', 'scan_error'].includes(err.code)) { fatal = err; return; }
             results[i] = { docType: 'ERROR' };
           }
           results[i]._page = i + 1;
@@ -1105,9 +1105,11 @@ function App() {
       setScanReview(rv);
     } catch (err) {
       const code = err && err.code;
-      const msg = code === 'not_granted' ? 'Claude access was declined for this app.'
-        : code === 'rate_limited' ? 'Usage limit reached. Please try again later.'
+      const msg = code === 'not_granted' ? 'AI access was declined for this app.'
+        : code === 'rate_limited' ? (err && err.message) || 'Usage limit reached. Please try again later.'
         : (err && err.message === 'pdf-lib-missing') ? 'The PDF reader could not load. Check your connection and retry.'
+        : (code === 'scan_error' || code === 'sampling_disabled') && err.message ? err.message
+        : (code === 'session_expired') ? 'Your sign-in expired. Reload the page and sign in again.'
         : 'Could not scan the document. Please try again.';
       console.error(err);
       showToast(msg, 'error');
@@ -1881,7 +1883,7 @@ function App() {
       const sample = window.claude ? await window.claude.use('sample') : null;
       const lim = sample ? await sample.limits().catch(() => null) : null;
       const maxImgs = lim && lim.images ? lim.images.maxCount : 0;
-      if (!sample || !maxImgs) { showToast('PDF import is not available. Check that the scan function is deployed and the Claude API key is set (see README).', 'error'); return; }
+      if (!sample || !maxImgs) { showToast('PDF import is not available. Check that the scan function is deployed and the AI key is set, or choose Local AI at the bottom left.', 'error'); return; }
 
       let pages = [];
       for (const f of files) {
@@ -1898,7 +1900,7 @@ function App() {
           const r = await sample.json(SCAN_PROMPT, { images: imgs });
           results.push({ ...(r && typeof r === 'object' ? r : {}), _label: pages[i].label });
         } catch (err) {
-          if (err && ['not_granted', 'sampling_disabled', 'rate_limited', 'session_expired', 'images_unavailable'].includes(err.code)) throw err;
+          if (err && ['not_granted', 'sampling_disabled', 'rate_limited', 'session_expired', 'images_unavailable', 'scan_error'].includes(err.code)) throw err;
           results.push({ docType: 'ERROR', _label: pages[i].label });
         }
       }
@@ -1999,9 +2001,11 @@ function App() {
       showToast('Imported ' + recs.length + ' delivery note(s). Review and edit before exporting.');
     } catch (err) {
       const code = err && err.code;
-      const msg = code === 'not_granted' ? 'Claude access was declined for this app.'
-        : code === 'rate_limited' ? 'Usage limit reached. Please try again later.'
+      const msg = code === 'not_granted' ? 'AI access was declined for this app.'
+        : code === 'rate_limited' ? (err && err.message) || 'Usage limit reached. Please try again later.'
         : (err && err.message === 'pdf-lib-missing') ? 'The PDF reader could not load. Check your connection and retry.'
+        : (code === 'scan_error' || code === 'sampling_disabled') && err.message ? err.message
+        : (code === 'session_expired') ? 'Your sign-in expired. Reload the page and sign in again.'
         : 'Could not read the document. Please try again.';
       console.error(err);
       showToast(msg, 'error');
