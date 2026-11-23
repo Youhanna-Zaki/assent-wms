@@ -165,9 +165,55 @@
     r.onerror = () => rej(r.error);
     r.readAsDataURL(b);
   });
+  // ---- AI engine setting: "cloud" (Supabase function + Gemini) or "local" (Ollama / LM Studio on this PC) ----
+  const AI_KEY = 'WMS_AI_ENGINE_V1';
+  const aiDefaults = { engine: 'cloud', url: 'http://localhost:11434', model: '' };
+  const ai = {
+    get() { try { return Object.assign({}, aiDefaults, JSON.parse(window.localStorage.getItem(AI_KEY) || '{}')); } catch (e) { return Object.assign({}, aiDefaults); } },
+    set(v) { try { window.localStorage.setItem(AI_KEY, JSON.stringify(Object.assign(ai.get(), v))); } catch (e) {} emit(); },
+    async models() {
+      const c = ai.get(); const base = c.url.replace(/\/$/, '');
+      const r = await fetch(base + '/v1/models');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      return (j.data || []).map((m) => m.id);
+    }
+  };
+  const LOCAL_SYSTEM = 'You read scanned supplier documents. Reply with one JSON object only, no explanation, no markdown.';
+  function extractJson(text) {
+    const t = String(text || '').replace(/```(?:json)?/gi, '').trim();
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a < 0 || b <= a) throw new Error('No JSON in model reply');
+    return JSON.parse(t.slice(a, b + 1));
+  }
+  async function localJson(prompt, blobs) {
+    const c = ai.get();
+    if (!c.model) throw { code: 'scan_error', message: 'Local AI: no model chosen. Open "AI engine" at the bottom left and pick a model.' };
+    const imgs = await Promise.all((blobs || []).map(blobToB64));
+    const content = imgs.map((im) => ({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data } }));
+    content.push({ type: 'text', text: prompt });
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 300000);
+    let resp;
+    try {
+      resp = await fetch(c.url.replace(/\/$/, '') + '/v1/chat/completions', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: c.model, temperature: 0, stream: false, messages: [{ role: 'system', content: LOCAL_SYSTEM }, { role: 'user', content }] })
+      });
+    } catch (e) {
+      throw { code: 'sampling_disabled', message: 'Local AI is not reachable at ' + c.url + '. Is Ollama / LM Studio running?' };
+    } finally { clearTimeout(timer); }
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw { code: 'scan_error', message: 'Local AI error: ' + ((body && body.error && (body.error.message || body.error)) || resp.statusText) };
+    const text = body && body.choices && body.choices[0] && body.choices[0].message ? body.choices[0].message.content : '';
+    try { return extractJson(text); } catch (e) { return { docType: 'ERROR' }; }
+  }
+
   const sample = {
     async limits() { return { images: { maxCount: 4 } }; },
     async json(prompt, opts) {
+      if (ai.get().engine === 'local') return localJson(prompt, (opts && opts.images) || []);
       const imgs = await Promise.all(((opts && opts.images) || []).map(blobToB64));
       const { data: s } = await state.sb.auth.getSession();
       const token = s && s.session ? s.session.access_token : null;
@@ -191,5 +237,5 @@
   window.claude = { use: async (name) => (name === 'sample' ? sample : null) };
   window.CloudDocs = CloudDocs;
 
-  window.WMSCloud = { KEYS, state, configured, init, session, signIn, signOut, hydrate, storage, watchRemote, flushAll, onChange: (f) => listeners.push(f) };
+  window.WMSCloud = { ai, KEYS, state, configured, init, session, signIn, signOut, hydrate, storage, watchRemote, flushAll, onChange: (f) => listeners.push(f) };
 })();
