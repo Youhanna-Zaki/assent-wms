@@ -190,7 +190,18 @@
   async function localJson(prompt, blobs) {
     const c = ai.get();
     if (!c.model) throw { code: 'scan_error', message: 'Local AI: no model chosen. Open "AI engine" at the bottom left and pick a model.' };
-    const imgs = await Promise.all((blobs || []).map(blobToB64));
+    const shrink = async (blob) => {
+      try {
+        const side = c.maxSide || 1280;
+        const bmp = await createImageBitmap(blob);
+        const k = Math.min(1, side / Math.max(bmp.width, bmp.height));
+        if (k >= 1) return blob;
+        const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+        cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+        return await new Promise((res) => cv.toBlob((x) => res(x || blob), 'image/jpeg', 0.85));
+      } catch (e) { return blob; }
+    };
+    const imgs = await Promise.all((blobs || []).map(async (bl) => blobToB64(await shrink(bl))));
     const content = imgs.map((im) => ({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data } }));
     content.push({ type: 'text', text: prompt });
     const ctl = new AbortController();
@@ -213,7 +224,7 @@
   }
 
   const sample = {
-    async limits() { return { images: { maxCount: 4 } }; },
+    async limits() { return { images: { maxCount: ai.get().engine === 'local' ? 1 : 4 } }; },
     async json(prompt, opts) {
       if (ai.get().engine === 'local') return localJson(prompt, (opts && opts.images) || []);
       const imgs = await Promise.all(((opts && opts.images) || []).map(blobToB64));
