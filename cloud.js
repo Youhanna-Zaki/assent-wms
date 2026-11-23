@@ -173,7 +173,8 @@
     set(v) { try { window.localStorage.setItem(AI_KEY, JSON.stringify(Object.assign(ai.get(), v))); } catch (e) {} emit(); },
     async models() {
       const c = ai.get(); const base = c.url.replace(/\/$/, '');
-      const r = await fetch(base + '/v1/models');
+      const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 6000);
+      let r; try { r = await fetch(base + '/v1/models', { signal: ctl.signal }); } finally { clearTimeout(tm); }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       return (j.data || []).map((m) => m.id);
