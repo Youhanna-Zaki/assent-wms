@@ -1092,7 +1092,16 @@ function App() {
         }
       };
       setScanProgress({ done: 0, total: pages.length, label: 'Reading page 0 of ' + pages.length + '…' });
-      await Promise.all([worker(), worker()]);
+      const isLocalAi = !!(window.WMSCloud && window.WMSCloud.ai && window.WMSCloud.ai.get().engine === 'local');
+      let tick = null;
+      if (isLocalAi) {
+        const t0 = Date.now();
+        tick = setInterval(() => {
+          const sec = Math.floor((Date.now() - t0) / 1000);
+          setScanProgress({ done, total: pages.length, label: 'Reading page ' + Math.min(done + 1, pages.length) + ' of ' + pages.length + '… Local AI is working (' + Math.floor(sec / 60) + 'm ' + (sec % 60) + 's). One page can take a few minutes on this PC.' });
+        }, 1000);
+      }
+      try { await Promise.all(isLocalAi ? [worker()] : [worker(), worker()]); } finally { if (tick) clearInterval(tick); }
       if (fatal) throw fatal;
       if (scanCancelRef.current) { showToast('Scan cancelled.'); return; }
 
